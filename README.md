@@ -33,9 +33,24 @@ Outputs: `env.json` (versions, preflight), `cases.jsonl` (every request),
 
 | study | question | cases | status |
 |---|---|---|---|
-| 1 (root folder) | random differential over the shared sudoers subset | random, seed 20261117 | pre-registered, queued |
-| [2 `study2-runas/`](study2-runas/PREREG-runas.md) | are negated Runas entries honoured with `-g`? | 26 fixed | pre-registered, queued |
-| [3 `study3-hosts/`](study3-hosts/PREREG-hosts.md) | do host lists and aliases match the same machines? | 23 fixed | pre-registered, queued |
+| 1 (root folder) | random differential over the shared sudoers subset | random, seed 20261117 | pre-registered, queued (needs a runner that allows set-uid) |
+| [2 `study2-runas/`](study2-runas/PREREG-runas.md) | are negated Runas entries honoured with `-g`? | 26 fixed | pre-registered; queued under amendment A2 |
+| [3 `study3-hosts/`](study3-hosts/PREREG-hosts.md) | do host lists and aliases match the same machines? | 23 fixed | pre-registered; queued under amendment A2 |
+
+### Amendment A2 (2026-11-24, before any result)
+
+The containers MV2 can run jobs in use no-new-privileges, so a set-uid `sudo`
+started by a normal user can never become root there. The `ubuntu:26.10` jobs
+also never started. [Amendment A2](a2-rootmode/AMENDMENT-A2.md) keeps every case,
+prediction and grading function, and changes only how a decision is observed:
+
+- **Run mode:** root invokes sudo, with `alice` and `root` swapped in every policy
+  line. The probe really runs.
+- **List mode** (study 3 cross-check): `sudo -l -U alice -u root cmd`.
+
+It also tests three sudo-rs releases (0.2.13 for 26.04 LTS, 0.2.14 for 26.10,
+and 0.2.15) against Debian's sudo. The runner is
+[`a2-rootmode/rootmode.py`](a2-rootmode/rootmode.py).
 
 Studies 2 and 3 come from reading both implementations' source. Each
 prediction cites the function it rests on. Study 3 predicts two kinds of
