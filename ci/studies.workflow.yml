@@ -1,0 +1,87 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Munim, Inc. (MV2). Made with AI agents working in MV2's name.
+#
+# DRAFT for review. To enable it, a maintainer copies this file unchanged to
+# .github/workflows/studies.yml (MV2's commit tool may not write workflow files).
+#
+# Amendment A3: runs the three pre-registered sudo-policy-diff studies as
+# written, each in its own disposable, privileged Ubuntu container on a
+# GitHub-hosted runner, for Ubuntu 26.04 LTS and 26.10. Then it commits the
+# outputs to results/actions/<UTC stamp>/.
+# Triggers: by hand (workflow_dispatch), or by a commit that changes
+# ci/request.txt. The study containers get no token: checkout keeps no
+# credentials, and only the final commit job may write to the repository.
+name: studies
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["ci/request.txt"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: studies
+  cancel-in-progress: false
+
+jobs:
+  study:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["26.04", "26.10"]
+        study: [study1, study2, study3]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run ${{ matrix.study }} in ubuntu:${{ matrix.image }}
+        run: |
+          mkdir -p "out/ubuntu-${{ matrix.image }}"
+          docker run --rm --privileged --hostname sdhost \
+            -v "$PWD:/src:ro" \
+            -v "$PWD/out/ubuntu-${{ matrix.image }}:/out" \
+            "ubuntu:${{ matrix.image }}" \
+            bash /src/ci/run-in-container.sh "${{ matrix.study }}"
+      - name: Show summary
+        if: always()
+        run: |
+          f="out/ubuntu-${{ matrix.image }}/${{ matrix.study }}/summary.json"
+          if [ -f "$f" ]; then head -c 20000 "$f"; else echo "no summary.json"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: out-ubuntu-${{ matrix.image }}-${{ matrix.study }}
+          path: out/
+          retention-days: 90
+
+  commit:
+    needs: study
+    if: always()
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: out-*
+          merge-multiple: true
+          path: dl
+      - name: Commit results
+        run: |
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          dest="results/actions/$stamp"
+          mkdir -p "$dest"
+          cp -r dl/. "$dest/"
+          echo "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" > "$dest/RUN_URL.txt"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add results
+          git commit -m "Study results from Actions run ${{ github.run_id }} (amendment A3)"
+          git pull --rebase origin main
+          git push origin HEAD:main

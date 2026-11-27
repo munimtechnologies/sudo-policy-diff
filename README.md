@@ -8,7 +8,7 @@ random sudoers policies inside the subset that both implementations document,
 and random requests to go with them: who runs it, `-u`/`-g`, the command form,
 arguments, the user's environment, `VAR=value` on the command line, `-E` and
 `-D`. It **runs** every request through both implementations in a disposable
-Ubuntu 26.10 container, then compares the results: whether the command ran,
+Ubuntu container, then compares the results: whether the command ran,
 which password was accepted, which uid/gid/groups it ran as, which binary was
 executed, and which of the user's environment values reached it. Any case
 where sudo-rs grants more than sudo is minimized into a small reproducer.
@@ -26,22 +26,46 @@ python3 -m unittest -v
 python3 sudodiff.py --out ./out --budget-minutes 75
 ```
 
-Outputs: `env.json` (versions, preflight), `cases.jsonl` (every request),
-`findings.json` (minimized reproducers), `summary.json` and `summary.md`.
+Or run any study the way amendment A3 does, from a checkout of this repository:
+
+```sh
+docker run --rm --privileged --hostname sdhost -v "$PWD:/src:ro" -v "$PWD/out:/out" \
+  ubuntu:26.10 bash /src/ci/run-in-container.sh study3   # or study1, study2
+```
+
+Outputs: `env.json` (versions, preflight), `summary.json` and `summary.md`, plus
+`cases.jsonl` and `findings.json` (study 1) or `results.json` (studies 2 and 3).
 
 ## Studies
 
 | study | question | cases | status |
 |---|---|---|---|
-| 1 (root folder) | random differential over the shared sudoers subset | random, seed 20261117 | pre-registered, queued (needs a runner that allows set-uid) |
-| [2 `study2-runas/`](study2-runas/PREREG-runas.md) | are negated Runas entries honoured with `-g`? | 26 fixed | pre-registered; queued under amendment A2 |
-| [3 `study3-hosts/`](study3-hosts/PREREG-hosts.md) | do host lists and aliases match the same machines? | 23 fixed | pre-registered; queued under amendment A2 |
+| 1 (root folder) | random differential over the shared sudoers subset | random, seed 20261117 | pre-registered; to run under amendment A3 |
+| [2 `study2-runas/`](study2-runas/PREREG-runas.md) | are negated Runas entries honoured with `-g`? | 26 fixed | pre-registered; A3 (as written) and A2 (cross-check) |
+| [3 `study3-hosts/`](study3-hosts/PREREG-hosts.md) | do host lists and aliases match the same machines? | 23 fixed | pre-registered; A3 (as written) and A2 (cross-check) |
+
+No study has produced a result yet.
+
+### Amendment A3 (2026-11-27, before any result)
+
+[Amendment A3](a3-actions/AMENDMENT-A3.md) runs all three studies **exactly as
+pre-registered** (a normal user invokes the set-uid binaries; study 3 can set a
+fully qualified host name) on GitHub-hosted runners, each study in its own
+disposable, privileged `ubuntu:26.04` or `ubuntu:26.10` container with the
+archive's own `sudo` and `sudo-rs` packages. The script is
+[`ci/run-in-container.sh`](ci/run-in-container.sh). The workflow is
+[`ci/studies.workflow.yml`](ci/studies.workflow.yml); it is enabled by copying
+it to `.github/workflows/`, and it commits every output to `results/actions/`.
+
+A3 also corrects A2: the earlier jobs did not stall because of their image. They
+waited in a shared job queue in which priority research jobs go first, while
+the machines had too little free memory.
 
 ### Amendment A2 (2026-11-24, before any result)
 
-The containers MV2 can run jobs in use no-new-privileges, so a set-uid `sudo`
-started by a normal user can never become root there. The `ubuntu:26.10` jobs
-also never started. [Amendment A2](a2-rootmode/AMENDMENT-A2.md) keeps every case,
+The containers on MV2's shared machines use no-new-privileges, so a set-uid
+`sudo` started by a normal user can never become root there.
+[Amendment A2](a2-rootmode/AMENDMENT-A2.md) keeps every case,
 prediction and grading function, and changes only how a decision is observed:
 
 - **Run mode:** root invokes sudo, with `alice` and `root` swapped in every policy
